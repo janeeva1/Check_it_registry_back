@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const twilio = require('twilio');
+const TermiiService = require('./TermiiService');
 const webpush = require('web-push');
 const { logActivity } = require('./AuditService');
 const EmailTemplate = require('./EmailTemplate');
@@ -7,7 +7,6 @@ const EmailTemplate = require('./EmailTemplate');
 class EnhancedNotificationService {
   constructor() {
     this.emailTransporter = null;
-    this.twilioClient = null;
     this.initializeServices();
   }
 
@@ -26,14 +25,6 @@ class EnhancedNotificationService {
         });
       }
 
-      // Initialize SMS service
-      if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-        this.twilioClient = twilio(
-          process.env.TWILIO_ACCOUNT_SID,
-          process.env.TWILIO_AUTH_TOKEN
-        );
-      }
-
       // Initialize push notifications
       if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
         webpush.setVapidDetails(
@@ -43,9 +34,9 @@ class EnhancedNotificationService {
         );
       }
 
-      console.log('✅ Enhanced Notification Service initialized');
+      console.log('Enhanced Notification Service initialized');
     } catch (error) {
-      console.error('❌ Error initializing notification services:', error);
+      console.error('Error initializing notification services:', error);
     }
   }
 
@@ -74,26 +65,9 @@ class EnhancedNotificationService {
     }
   }
 
-  // Send SMS notification
+  // Send SMS notification (via Termii — device check alerts only)
   async sendSMS(to, message) {
-    if (process.env.NODE_ENV === 'test') return { success: true, sid: 'test-skip' };
-    if (!this.twilioClient) {
-      return { success: false, reason: 'SMS service not configured' };
-    }
-
-    try {
-      const result = await this.twilioClient.messages.create({
-        body: message,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to
-      });
-
-      console.log('📱 SMS sent successfully to:', to);
-      return { success: true, sid: result.sid };
-    } catch (error) {
-      console.error('❌ Error sending SMS:', error);
-      return { success: false, error: error.message };
-    }
+    return TermiiService.sendSMS(to, message);
   }
 
   // Send push notification
@@ -201,12 +175,6 @@ class EnhancedNotificationService {
         await this.sendEmail(user.email, `${subject} - ${deviceName}`, htmlContent);
       }
 
-      // SMS notification
-      if (preferences.sms_notifications && preferences.verification_notifications && preferences.phone) {
-        const smsMessage = `Prove Ownership: Your ${deviceName} verification has been ${status}. ${approved ? 'Your device is now protected!' : 'Please check your email for details.'} View: ${process.env.FRONTEND_URL}/devices`;
-        await this.sendSMS(preferences.phone, smsMessage);
-      }
-
       // Log notification
       await logActivity(connection, 'system', 'notification_sent', 'user', userId, 
         `Device verification notification sent (${status})`, '127.0.0.1', 'NotificationService');
@@ -287,10 +255,16 @@ class EnhancedNotificationService {
         await this.sendEmail(user.email, `${subject} - ${deviceName}`, htmlContent);
       }
 
-      // SMS for critical alerts
-      if (preferences.sms_notifications && preferences.device_alerts && preferences.phone && alertType === 'suspicious_activity') {
-        const smsMessage = `🚨 Prove Ownership ALERT: Suspicious activity detected on your ${deviceName}. Check your email and secure your device immediately. ${process.env.FRONTEND_URL}`;
-        await this.sendSMS(preferences.phone, smsMessage);
+      // SMS for device check alerts — ONLY SMS in the entire system (via Termii)
+      if (preferences.phone && alertType === 'device_checked') {
+        const TermiiService = require('./TermiiService');
+        await TermiiService.sendDeviceCheckAlert(preferences.phone, {
+          deviceName,
+          deviceId: device.id || 'Unknown',
+          status: 'checked',
+          checkerInfo: details.checker_name || details.checker_email || null,
+          location: details.location || null,
+        });
       }
 
     } catch (error) {
@@ -351,12 +325,6 @@ class EnhancedNotificationService {
       });
 
       await this.sendEmail(user.email, subject, htmlContent);
-
-      // SMS for resolved cases
-      if (preferences.sms_notifications && preferences.phone && newStatus === 'resolved') {
-        const smsMessage = `Prove Ownership: Your report case #${report.case_id} has been RESOLVED! Check your email for details. ${process.env.FRONTEND_URL}/reports`;
-        await this.sendSMS(preferences.phone, smsMessage);
-      }
 
     } catch (error) {
       console.error('Error sending report status update:', error);

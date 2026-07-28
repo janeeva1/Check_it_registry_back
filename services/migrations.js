@@ -344,6 +344,63 @@ const MIGRATIONS = [
       ).catch(() => {});
     }
   },
+  {
+    name: '013_add_device_nin_verification_and_free_reports',
+    sql: [
+      `CREATE TABLE IF NOT EXISTS device_nin_verification (
+        id VARCHAR(36) PRIMARY KEY,
+        device_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        nin_number VARCHAR(11) NOT NULL,
+        nin_verified TINYINT(1) DEFAULT 0,
+        verified_at TIMESTAMP NULL,
+        verification_provider VARCHAR(50) DEFAULT NULL,
+        verification_response JSON DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_device_nin_device ON device_nin_verification(device_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_device_nin_user ON device_nin_verification(user_id)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_device_nin_unique ON device_nin_verification(device_id, user_id)`,
+    ],
+    seed: async () => {
+      await db.query(
+        'ALTER TABLE device_nin_verification ADD CONSTRAINT dnin_fk_device FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE'
+      ).catch(() => {});
+      await db.query(
+        'ALTER TABLE device_nin_verification ADD CONSTRAINT dnin_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE'
+      ).catch(() => {});
+
+      const existing = await db.query("SELECT id FROM system_settings WHERE setting_key = 'free_reports_per_device'");
+      if (existing.length === 0) {
+        await db.query(
+          `INSERT INTO system_settings (id, setting_key, setting_value, setting_type, description, is_public)
+           VALUES (UUID(), 'free_reports_per_device', '3', 'number', 'Number of free reports per device before payment required', false)`
+        );
+      }
+
+      const existingNinFee = await db.query("SELECT id FROM system_settings WHERE setting_key = 'nin_verification_per_device_fee'");
+      if (existingNinFee.length === 0) {
+        await db.query(
+          `INSERT INTO system_settings (id, setting_key, setting_value, setting_type, description, is_public)
+           VALUES (UUID(), 'nin_verification_per_device_fee', '500', 'number', 'Fee for per-device NIN verification', false)`
+        );
+      }
+    }
+  },
+  {
+    name: '014_add_active_payment_provider_setting',
+    sql: [],
+    seed: async () => {
+      const existing = await db.query("SELECT id FROM system_settings WHERE setting_key = 'active_payment_provider'");
+      if (existing.length === 0) {
+        await db.query(
+          `INSERT INTO system_settings (id, setting_key, setting_value, setting_type, description, is_public)
+           VALUES (UUID(), 'active_payment_provider', 'paystack', 'string', 'Active payment provider: paystack or monify', false)`
+        );
+      }
+    }
+  },
 ];
 
 async function runMigrations() {

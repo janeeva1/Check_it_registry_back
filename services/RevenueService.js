@@ -10,6 +10,8 @@ const DEFAULT_FEES = {
   device_recovery_fee: 2000,
   business_onboarding_fee: 5000,
   business_onboarding_commission_percent: 30,
+  free_reports_per_device: 3,
+  nin_verification_per_device_fee: 500,
 };
 
 class RevenueService {
@@ -17,7 +19,12 @@ class RevenueService {
     const row = await Database.selectOne('system_settings', 'setting_value',
       'setting_key = ?', [key]);
     if (row) return parseFloat(row.setting_value);
-    return DEFAULT_FEES[key] || 0;
+    if (DEFAULT_FEES[key] !== undefined) {
+      console.warn(`[RevenueService] Fee '${key}' not found in system_settings, using hardcoded fallback: ${DEFAULT_FEES[key]}`);
+      return DEFAULT_FEES[key];
+    }
+    console.error(`[RevenueService] Fee '${key}' not found in system_settings and no fallback defined.`);
+    return 0;
   }
 
   static async setFee(key, value, adminId) {
@@ -141,6 +148,34 @@ class RevenueService {
       [userId]
     );
     return count;
+  }
+
+  static async getUserDeviceReportCount(userId, deviceId) {
+    const [{ count }] = await Database.query(
+      `SELECT COUNT(*) as count FROM reports WHERE reporter_id = ? AND device_id = ?`,
+      [userId, deviceId]
+    );
+    return count;
+  }
+
+  static async shouldChargeForReport(userId, deviceId) {
+    const freeReportsPerDevice = await this.getFee('free_reports_per_device');
+    const deviceReportCount = await this.getUserDeviceReportCount(userId, deviceId);
+    return deviceReportCount >= freeReportsPerDevice;
+  }
+
+  static async getActivePaymentProvider() {
+    const row = await Database.selectOne('system_settings', 'setting_value',
+      "setting_key = 'active_payment_provider'");
+    return row?.setting_value || 'paystack';
+  }
+
+  static async setActivePaymentProvider(provider, adminId) {
+    if (!['paystack', 'monify'].includes(provider)) {
+      throw new Error('Invalid payment provider. Must be paystack or monify.');
+    }
+    await this.setFee('active_payment_provider', provider, adminId);
+    return provider;
   }
 
   static async createBusinessOnboarding(data) {

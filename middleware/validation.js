@@ -175,7 +175,21 @@ const commonValidations = {
     query('sort_by').optional().isIn(['created_at', 'updated_at', 'name', 'email', 'status']).withMessage('Invalid sort field'),
     query('sort_order').optional().isIn(['ASC', 'DESC']).withMessage('Sort order must be ASC or DESC'),
     handleValidationErrors
-  ]
+  ],
+
+  // Device check validation
+  deviceCheck: [
+    query('imei').optional().isLength({ min: 1, max: 20 }).withMessage('IMEI format invalid'),
+    query('serial').optional().isLength({ min: 1, max: 50 }).withMessage('Serial format invalid'),
+    handleValidationErrors
+  ],
+
+  // Per-device NIN verification validation
+  perDeviceNinVerification: [
+    validateInput('device_id', { required: true, type: 'uuid' }),
+    validateInput('nin_number', { required: true, pattern: /^\d{11}$/ }),
+    handleValidationErrors
+  ],
 };
 
 // File upload validation

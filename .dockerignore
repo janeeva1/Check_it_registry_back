@@ -1,0 +1,13 @@
+node_modules
+.env
+.env.*
+uploads/*
+!uploads/profiles
+!uploads/devices
+!uploads/transfers
+!uploads/misc
+.git
+.gitignore
+tests
+test-parallel.txt
+*.log

@@ -1,4 +1,4 @@
-// Notification Service - Email, SMS, and Push Notifications
+// Notification Service - Email and Push Notifications
 const nodemailer = require("nodemailer");
 const Database = require("../config");
 const EmailTemplate = require("./EmailTemplate");
@@ -17,16 +17,6 @@ class NotificationService {
       connectionTimeout: 5000,
       socketTimeout: 10000,
     });
-
-    // SMS configuration (Twilio)
-    this.twilioClient = null;
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-      const twilio = require("twilio");
-      this.twilioClient = twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN
-      );
-    }
   }
 
   // Queue notification for processing
@@ -82,7 +72,9 @@ class NotificationService {
           result = await this.sendEmail(notification);
           break;
         case "sms":
-          result = await this.sendSMS(notification);
+          // SMS channel deprecated — all notifications use email
+          console.log(`[NotificationService] SMS channel deprecated. Converting to email for: ${notification.recipient}`);
+          result = await this.sendEmail(notification);
           break;
         case "push":
           result = await this.sendPush(notification);
@@ -176,26 +168,10 @@ class NotificationService {
     }
   }
 
-  // Send SMS notification
+  // SMS channel deprecated — device check alerts use TermiiService directly
   async sendSMS(notification) {
-    if (process.env.NODE_ENV === 'test') return true;
-    if (!this.twilioClient) {
-      return true;
-    }
-
-    try {
-      await this.twilioClient.messages.create({
-        body: notification.message,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: notification.recipient,
-      });
-
-      console.log("✅ SMS sent successfully to:", notification.recipient);
-      return true;
-    } catch (error) {
-      console.error("❌ SMS send failed:", error);
-      return false;
-    }
+    console.log('[NotificationService] SMS deprecated. Use TermiiService for device check alerts.');
+    return true;
   }
 
   // Send push notification
@@ -259,11 +235,6 @@ class NotificationService {
         type: "device_verified",
       }
     );
-
-    if (user.phone) {
-      const smsMessage = `Prove Ownership: Your ${deviceInfo.brand} ${deviceInfo.model} has been verified and is now protected. Case any issues, contact support.`;
-      await this.queueNotification(userId, "sms", user.phone, null, smsMessage);
-    }
   }
 
   async notifyDeviceRejected(userId, deviceInfo, reason) {
@@ -337,11 +308,6 @@ class NotificationService {
         type: "device_stolen",
       }
     );
-
-    if (user.phone) {
-      const smsMessage = `Prove Ownership: Your ${deviceInfo.brand} ${deviceInfo.model} reported stolen. Case ID: ${caseId}. LEA notified.`;
-      await this.queueNotification(userId, "sms", user.phone, null, smsMessage);
-    }
   }
 
   async notifyLEANewCase(leaId, caseInfo) {
@@ -420,11 +386,6 @@ class NotificationService {
         type: "device_found",
       }
     );
-
-    if (user.phone) {
-      const smsMessage = `Prove Ownership: Your ${deviceInfo.brand} ${deviceInfo.model} may have been found! Case: ${caseId}. LEA will contact you.`;
-      await this.queueNotification(userId, "sms", user.phone, null, smsMessage);
-    }
   }
 
   // Process pending notifications (for background job)

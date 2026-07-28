@@ -2,6 +2,7 @@
 const express = require('express');
 const Database = require('../config');
 const { authenticateToken } = require('../middleware/auth');
+const { require2FASetup } = require('../middleware/twoFaEnforcement');
 
 const router = express.Router();
 
@@ -13,9 +14,10 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Apply authentication and admin check to all routes
+// Apply authentication, admin check, and 2FA enforcement to all routes
 router.use(authenticateToken);
 router.use(requireAdmin);
+router.use(require2FASetup);
 
 // GET /api/admin-dashboard/stats - Dashboard statistics
 router.get('/stats', async (req, res) => {

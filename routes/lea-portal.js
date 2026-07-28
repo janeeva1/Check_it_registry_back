@@ -2,13 +2,15 @@
 const express = require('express');
 const Database = require('../config');
 const { authenticateToken, requireRole } = require('../middleware/auth');
+const { require2FASetup } = require('../middleware/twoFaEnforcement');
 const NotificationService = require('../services/NotificationService');
 
 const router = express.Router();
 
-// Middleware: Require LEA role
+// Middleware: Require LEA role with 2FA enforcement
 router.use(authenticateToken);
 router.use(requireRole(['lea', 'admin']));
+router.use(require2FASetup);
 
 // Get LEA dashboard stats
 router.get('/stats', async (req, res) => {

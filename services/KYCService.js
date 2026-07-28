@@ -6,7 +6,11 @@ const path = require('path');
 const NINVerificationService = require('./NINVerificationService');
 
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_KEY = process.env.KYC_ENCRYPTION_KEY || 'vOVH6sdmpNWjRRIqCc7rdxs01lwBzfr3';
+const ENCRYPTION_KEY = process.env.KYC_ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 32) {
+  console.error('FATAL: KYC_ENCRYPTION_KEY environment variable is required and must be at least 32 characters.');
+  process.exit(1);
+}
 const IV_LENGTH = 16;
 
 class KYCService {

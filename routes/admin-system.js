@@ -181,7 +181,7 @@ router.get('/configuration', async (req, res) => {
     // Get system settings (from environment and database)
     const systemSettings = {
       email_configured: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
-      sms_configured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+        sms_configured: !!(process.env.TERMII_API_KEY),
       push_configured: !!process.env.FCM_SERVER_KEY,
       file_upload_enabled: true,
       background_jobs_enabled: BackgroundJobs.getStatus().running,

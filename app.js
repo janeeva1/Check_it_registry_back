@@ -17,6 +17,7 @@ const errorStore = require('./services/ErrorStore');
 // Import middleware
 const { validationErrorHandler } = require('./middleware/validation');
 const { requestLogger } = require('./middleware/requestLogger');
+const { responseEnvelope } = require('./middleware/responseEnvelope');
 
 // Import routes
 const { router: authRoutes } = require('./routes/auth');
@@ -40,7 +41,8 @@ app.use(helmet({
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
       baseUri: ["'self'"],
-      formAction: ["'self'"]
+      formAction: ["'self'"],
+      reportUri: [process.env.CSP_REPORT_URI || "/api/csp-report"],
     }
   },
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
@@ -172,6 +174,12 @@ app.get('/health', (req, res) => {
   });
 });
 
+// CSP report endpoint
+app.post('/api/csp-report', express.json({ type: 'application/csp-report' }), (req, res) => {
+  console.warn('[CSP Violation]', JSON.stringify(req.body, null, 2));
+  res.sendStatus(204);
+});
+
 // Core API routes (essential functionality only)
 const kycRoutes = require('./routes/kyc');
 
@@ -195,6 +203,8 @@ app.use('/api/recovery-services', require('./routes/recovery-services'));
 app.use('/api/marketplace', require('./routes/marketplace'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/payments', require('./routes/payouts'));
+app.use('/api/payments/webhook', require('./routes/payment-webhook'));
+app.use('/api/checkout', require('./routes/checkout'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/escrow', require('./routes/escrow'));
 
@@ -223,6 +233,12 @@ app.use('/api/dashboard-config', require('./routes/dashboard-config'));
 app.use('/api/info', require('./routes/api-info'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/advanced-search', require('./routes/advanced-search'));
+
+// Session management routes
+app.use('/api/sessions', require('./routes/session-management'));
+
+// PII encryption admin route
+app.use('/api/admin/pii', require('./routes/pii-admin'));
 
 // API Documentation
 const swaggerUi = require('swagger-ui-express');

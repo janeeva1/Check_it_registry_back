@@ -144,17 +144,6 @@ router.post("/initiate-legacy", async (req, res) => {
       }
     );
 
-    // Send SMS if phone number available
-    if (toUser.phone) {
-      await NotificationService.queueNotification(
-        toUser.id,
-        "sms",
-        toUser.phone,
-        null,
-        `Prove Ownership: Device transfer request from ${req.user.name}. ${device.brand} ${device.model}. Code: ${transferCode}. Expires in 24h.`
-      );
-    }
-
     // Notify sender
     await NotificationService.queueNotification(
       fromUserId,

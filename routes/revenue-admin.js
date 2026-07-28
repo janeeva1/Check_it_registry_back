@@ -36,7 +36,8 @@ router.get('/fees/:key', authenticateToken, async (req, res) => {
     const { key } = req.params;
     const validKeys = ['nin_verification_fee', 'report_verification_fee', 'device_check_free_tier',
       'device_check_fee', 'business_verification_fee', 'marketplace_commission_percent', 'device_recovery_fee',
-      'business_onboarding_fee', 'business_onboarding_commission_percent'];
+      'business_onboarding_fee', 'business_onboarding_commission_percent', 'free_reports_per_device',
+      'nin_verification_per_device_fee'];
     if (!validKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid fee key' });
     }
@@ -53,7 +54,8 @@ router.put('/fees/:key', requireAdmin, async (req, res) => {
     const { value } = req.body;
     const validKeys = ['nin_verification_fee', 'report_verification_fee', 'device_check_free_tier',
       'device_check_fee', 'business_verification_fee', 'marketplace_commission_percent', 'device_recovery_fee',
-      'business_onboarding_fee', 'business_onboarding_commission_percent'];
+      'business_onboarding_fee', 'business_onboarding_commission_percent', 'free_reports_per_device',
+      'nin_verification_per_device_fee'];
 
     if (!validKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid fee key' });
@@ -244,6 +246,49 @@ router.get('/summary', requireAdmin, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch revenue summary' });
+  }
+});
+
+router.get('/invoices/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await Database.selectOne('payment_invoices', '*', 'id = ?', [id]);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && invoice.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    res.json({
+      data: {
+        ...invoice,
+        amount: parseFloat(invoice.amount),
+        metadata: invoice.metadata ? JSON.parse(invoice.metadata) : null,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch invoice' });
+  }
+});
+
+router.get('/payment-provider', requireAdmin, async (req, res) => {
+  try {
+    const provider = await RevenueService.getActivePaymentProvider();
+    res.json({ provider, available: ['paystack', 'monify'] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch payment provider' });
+  }
+});
+
+router.put('/payment-provider', requireAdmin, async (req, res) => {
+  try {
+    const { provider } = req.body;
+    const result = await RevenueService.setActivePaymentProvider(provider, req.user.id);
+    await Database.logAudit(req.user.id, 'PAYMENT_PROVIDER_UPDATED', 'system_settings', 'active_payment_provider',
+      null, { provider: result }, req.ip);
+    res.json({ success: true, provider: result });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Failed to update payment provider' });
   }
 });
 

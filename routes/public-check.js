@@ -7,6 +7,8 @@ const FraudDetectionService = require('../services/FraudDetectionService');
 
 const router = express.Router();
 
+// Anonymous access is allowed but rate-limited and tracked
+// Authenticated users get higher limits and their checks are attributed
 const noRestrictions = (req, res, next) => {
   next();
 };
@@ -53,6 +55,21 @@ router.get('/', noRestrictions, async (req, res) => {
       return res.status(400).json({ 
         error: 'IMEI or serial number required' 
       });
+    }
+
+    // Resolve checker identity if token provided (smart alerting)
+    let checkerUserId = null;
+    let checker = null;
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = Database.verifyJWT(token);
+        checkerUserId = decoded.id;
+        checker = await Database.selectOne('users', 'id, name, email, role', 'id = ?', [checkerUserId]);
+      } catch (error) {
+        // Continue without identity for anonymous checks
+      }
     }
 
     // Require network and location context
@@ -191,7 +208,7 @@ router.get('/', noRestrictions, async (req, res) => {
       await Database.insert('device_check_logs', {
         id: checkId,
         device_id: device.id,
-        checker_user_id: null,
+        checker_user_id: checkerUserId,
         check_type: 'public_check',
         ip_address: clientIP,
         mac_address: macAddress,
@@ -222,6 +239,7 @@ router.get('/', noRestrictions, async (req, res) => {
               <li><strong>IP:</strong> ${clientIP}</li>
               <li><strong>MAC:</strong> ${macAddress || 'Unknown'}</li>
               <li><strong>User-Agent:</strong> ${userAgent}</li>
+              <li><strong>Checker:</strong> ${checker ? `${checker.name} (${checker.email || checker.id})` : 'Anonymous'}</li>
               <li><strong>Location:</strong> ${locationLatitude && locationLongitude ? `${locationLatitude}, ${locationLongitude} (±${locationAccuracy || 'n/a'}m)` : 'Unknown'}</li>
               <li><strong>Check ID:</strong> ${checkId}</li>
             </ul>

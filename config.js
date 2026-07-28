@@ -176,7 +176,7 @@ class Database {
     return await bcrypt.compare(password, hash);
   }
 
-  // JWT utilities
+  // JWT utilities — supports secret rotation via JWT_SECRET_PREVIOUS
   static generateJWT(payload) {
     const jwt = require('jsonwebtoken');
     const secret = process.env.JWT_SECRET;
@@ -186,9 +186,23 @@ class Database {
 
   static verifyJWT(token) {
     const jwt = require('jsonwebtoken');
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('JWT_SECRET is not configured');
-    return jwt.verify(token, secret, { algorithms: ['HS256'] });
+    const currentSecret = process.env.JWT_SECRET;
+    if (!currentSecret) throw new Error('JWT_SECRET is not configured');
+
+    try {
+      return jwt.verify(token, currentSecret, { algorithms: ['HS256'] });
+    } catch (err) {
+      // If verification with current secret fails, try previous secret (rotation window)
+      const previousSecret = process.env.JWT_SECRET_PREVIOUS;
+      if (previousSecret) {
+        try {
+          return jwt.verify(token, previousSecret, { algorithms: ['HS256'] });
+        } catch (prevErr) {
+          // Neither secret worked
+        }
+      }
+      throw err;
+    }
   }
 
   // Close pool (for graceful shutdown)

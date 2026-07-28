@@ -23,7 +23,7 @@ router.get('/config', async (req, res) => {
       },
       features: {
         email_notifications: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
-        sms_notifications: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+        sms_notifications: !!(process.env.TERMII_API_KEY),
         push_notifications: !!process.env.FCM_SERVER_KEY,
         file_uploads: true,
         background_jobs: true,

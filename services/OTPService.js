@@ -248,40 +248,9 @@ class OTPService {
     await NotificationService.sendEmailDirect(user.email, `${tpl.subject} - Prove Ownership`, fullHtml);
   }
 
-  // Send OTP via SMS (placeholder for future SMS integration)
+  // SMS OTP deprecated — all OTPs use email only
   async sendOTPSMS(phoneNumber, otpCode, otpType, expiryMinutes) {
-    try {
-      const connection = await this.pool.getConnection();
-      
-      try {
-        const messages = {
-          email_verification: `Your Prove Ownership verification code is: ${otpCode}. Expires in ${expiryMinutes} minutes.`,
-          device_transfer: `Your Prove Ownership device transfer code is: ${otpCode}. Share only with the recipient. Expires in ${expiryMinutes} minutes.`,
-          password_reset: `Your Prove Ownership password reset code is: ${otpCode}. Expires in ${expiryMinutes} minutes.`,
-          '2fa': `Your Prove Ownership 2FA code is: ${otpCode}. Expires in ${expiryMinutes} minutes.`
-        };
-
-        const message = messages[otpType] || messages.email_verification;
-
-        // Store SMS in queue (for future SMS provider integration)
-        await connection.execute(
-          `INSERT INTO sms_notifications (phone_number, message, notification_type, status) 
-           VALUES (?, ?, ?, 'pending')`,
-          [phoneNumber, message, otpType]
-        );
-
-        console.log(`SMS queued for ${phoneNumber}: ${message}`);
-        
-        // TODO: Integrate with SMS provider (Twilio, etc.)
-        // For now, just log the SMS
-        
-      } finally {
-        connection.release();
-      }
-    } catch (error) {
-      console.error('Error sending SMS:', error);
-      // Don't throw error for SMS failures
-    }
+    console.log(`[OTPService] SMS OTP deprecated. OTP ${otpType} sent via email only.`);
   }
 
   // Clean up expired OTPs (should be run periodically)

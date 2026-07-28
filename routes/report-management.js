@@ -174,24 +174,26 @@ router.post('/', async (req, res) => {
         return res.status(403).json({ error: 'Reporting blocked due to security concerns. Contact support.' });
       }
 
-      /* Charge report verification fee after first free report */
-      const reportCount = await RevenueService.getUserReportCount(userId);
-      if (reportCount > 0) {
+      /* Charge report verification fee after free reports per device exceeded */
+      const shouldCharge = await RevenueService.shouldChargeForReport(userId, device_id);
+      if (shouldCharge) {
         const fee = await RevenueService.getFee('report_verification_fee');
         if (fee > 0) {
           const { pay_by_pass } = req.body;
           if (!pay_by_pass) {
+            const reference = `RPT-${userId}-${Date.now()}`;
             const invoiceId = await RevenueService.createPaymentInvoice(
               userId, fee, 'report_verification',
-              `RPT-${userId}-${Date.now()}`,
+              reference,
               { device_id, report_type }
             );
             return res.json({
               requiresPayment: true,
               invoiceId,
+              reference,
               amount: fee,
               purpose: 'Report Verification Fee',
-              message: `Payment of ₦${fee} required for this report.`
+              message: `Free reports for this device exceeded. Payment of ₦${fee} required for this report.`
             });
           }
         }

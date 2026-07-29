@@ -550,7 +550,11 @@ router.put('/devices/:id', async (req, res) => {
 
       if (subject) {
         const fullHtml = EmailTemplate.wrapContent(subject, content);
-        await NotificationService.sendEmailDirect(owner.email, `${subject} - Prove Ownership`, fullHtml);
+        try {
+          await NotificationService.sendEmailDirect(owner.email, `${subject} - Prove Ownership`, fullHtml);
+        } catch (emailErr) {
+          console.warn("Failed to send device status notification to owner:", emailErr.message);
+        }
       }
     }
 

@@ -284,11 +284,15 @@ class PaymentRecoveryService {
       );
 
       // Send activation email
-      await NotificationService.sendEmailDirect(
-        service.user_email,
-        'Recovery Service Activated - Prove Ownership',
-        EmailTemplate.wrapContent('Recovery Service Activated', this.generateActivationEmail(service, agent))
-      );
+      try {
+        await NotificationService.sendEmailDirect(
+          service.user_email,
+          'Recovery Service Activated - Prove Ownership',
+          EmailTemplate.wrapContent('Recovery Service Activated', this.generateActivationEmail(service, agent))
+        );
+      } catch (emailErr) {
+        console.warn("Failed to send recovery activation email:", emailErr.message);
+      }
 
       // Notify assigned agent
       if (agent) {
@@ -519,13 +523,17 @@ class PaymentRecoveryService {
         );
 
         // Send refund notification
-        const user = await Database.selectOne('users', 'name, email', 'user_id = ?', [service.user_id]);
-        if (user) {
-          await NotificationService.sendEmailDirect(
-            user.email,
-            'Recovery Service Refund Processed - Prove Ownership',
-            EmailTemplate.wrapContent('Refund Processed', this.generateRefundEmail(service, refundAmount))
-          );
+        try {
+          const user = await Database.selectOne('users', 'name, email', 'id = ?', [service.user_id]);
+          if (user && user.email) {
+            await NotificationService.sendEmailDirect(
+              user.email,
+              'Recovery Service Refund Processed - Prove Ownership',
+              EmailTemplate.wrapContent('Refund Processed', this.generateRefundEmail(service, refundAmount))
+            );
+          }
+        } catch (emailErr) {
+          console.warn("Failed to send refund notification:", emailErr.message);
         }
       }
 

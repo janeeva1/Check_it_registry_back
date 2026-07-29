@@ -365,7 +365,6 @@ async function startServer() {
     console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
 
     if (process.env.NODE_ENV === 'development') {
-      BackgroundJobs.start();
       SystemMonitor.start();
     }
   });

@@ -6,6 +6,8 @@ const { authenticateToken, collectAuditContext } = require('../middleware/auth')
 const RevenueService = require('../services/RevenueService');
 const SecurityService = require('../services/SecurityService');
 const FraudDetectionService = require('../services/FraudDetectionService');
+const NotificationService = require('../services/NotificationService');
+const EmailTemplate = require('../services/EmailTemplate');
 
 router.use(authenticateToken);
 router.use(collectAuditContext);
@@ -265,113 +267,53 @@ router.post('/', async (req, res) => {
         );
       }
 
-      // Queue notifications (use notification_queue table for compatibility)
-      const notificationQueue = [];
+    });
 
-      // Queue reporter email
-      notificationQueue.push({
-        id: Database.generateUUID(),
-        user_id: userId,
-        notification_type: 'email',
-        subject: `Report Filed - Case ${caseId}`,
-        message: `Your ${report_type} report has been filed with case ID ${caseId}`,
-        html_content: null,
-        recipient: req.user.email,
-        status: 'pending',
-        attempts: 0,
-        max_attempts: 3,
-        scheduled_at: new Date(),
-        created_at: new Date(),
-        updated_at: new Date()
-      });
+    // Send notifications outside transaction
+    try {
+      const userDetails = await Database.selectOne('users', 'name, email', 'id = ?', [userId]);
+      const deviceInfo = await Database.selectOne('devices', 'brand, model, imei', 'id = ?', [device_id]);
 
-      // Queue LEA email if assigned
+      // Notify reporter
+      const reportSubject = `Report Filed - Case ${caseId}`;
+      const reportMessage = `
+        <p>Hello <strong>${userDetails?.name || 'User'}</strong>,</p>
+        <p>Your <strong>${report_type}</strong> report has been filed successfully.</p>
+        <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 15px 0;">
+          <table cellpadding="4" cellspacing="0" style="font-size: 14px; color: #374151;">
+            <tr><td style="font-weight: 600; padding-right: 12px;">Case ID:</td><td>${caseId}</td></tr>
+            <tr><td style="font-weight: 600; padding-right: 12px;">Device:</td><td>${deviceInfo?.brand || ''} ${deviceInfo?.model || ''}</td></tr>
+            <tr><td style="font-weight: 600; padding-right: 12px;">IMEI:</td><td>${deviceInfo?.imei || 'N/A'}</td></tr>
+            <tr><td style="font-weight: 600; padding-right: 12px;">Status:</td><td>Open</td></tr>
+          </table>
+        </div>
+        <p>Law enforcement has been notified and will review your case. You will receive updates as it progresses.</p>
+      `;
+      const wrappedHtml = EmailTemplate.wrapContent(reportSubject, reportMessage);
+      await NotificationService.queueNotification(
+        userId, 'email', req.user.email, reportSubject, wrappedHtml,
+        { caseId, type: 'report_filed', deviceInfo: deviceInfo ? `${deviceInfo.brand} ${deviceInfo.model}` : '' }
+      );
+
+      // Notify LEA if assigned
       if (lea) {
-        const leaDetails = await Database.selectOne(
-          'law_enforcement_agencies',
-          'contact_email',
-          'id = ?',
-          [lea.id]
-        );
-
-        notificationQueue.push({
-          id: Database.generateUUID(),
-          user_id: null,
-          notification_type: 'email',
-          subject: `New ${report_type} Report - Case ${caseId}`,
-          message: `A new ${report_type} report has been filed in your jurisdiction`,
-          html_content: null,
-          recipient: leaDetails.contact_email,
-          status: 'pending',
-          attempts: 0,
-          max_attempts: 3,
-          scheduled_at: new Date(),
-          created_at: new Date(),
-          updated_at: new Date()
-        });
-      }
-
-      // Insert notifications; prefer notification_queue, fallback to system_notifications
-      for (const item of notificationQueue) {
-        try {
-          await connection.execute(
-            `INSERT INTO notification_queue (
-              id, user_id, notification_type, subject, message, html_content,
-              recipient, status, attempts, max_attempts, scheduled_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              item.id,
-              item.user_id,
-              item.notification_type,
-              item.subject,
-              item.message,
-              item.html_content,
-              item.recipient,
-              item.status,
-              item.attempts,
-              item.max_attempts,
-              item.scheduled_at,
-              item.created_at,
-              item.updated_at
-            ]
-          );
-        } catch (err) {
-          // Fallback to system_notifications schema
-          try {
-            const isUser = !!item.user_id;
-            await connection.execute(
-              `INSERT INTO system_notifications (
-                id, recipient_user_id, recipient_role, recipient_region, notification_type,
-                title, message, priority, device_id, report_id,
-                send_email, send_sms, send_push, action_url, action_text,
-                created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                Database.generateUUID(),
-                isUser ? item.user_id : null,
-                isUser ? 'user' : 'lea',
-                isUser ? null : userRegion,
-                'device_report',
-                item.subject,
-                item.message,
-                'medium',
-                device_id,
-                reportId,
-                1,
-                0,
-                1,
-                `/reports/${caseId}`,
-                'View case',
-                new Date(),
-                new Date()
-              ]
-            );
-          } catch (fallbackErr) {
-            console.warn('Notification insert failed (both queue and system):', fallbackErr.message);
-          }
+        const leaDetails = await Database.selectOne('law_enforcement_agencies', 'agency_name, contact_email', 'id = ?', [lea.id]);
+        if (leaDetails) {
+          const leaSubject = `New ${report_type} Report - Case ${caseId}`;
+          await NotificationService.notifyLEANewCase(lea.id, {
+            case_id: caseId,
+            report_type,
+            device_brand: deviceInfo?.brand || 'Unknown',
+            device_model: deviceInfo?.model || 'Unknown',
+            device_imei: deviceInfo?.imei || null,
+            location: location || 'Not specified',
+            occurred_at
+          });
         }
       }
-    });
+    } catch (notifyErr) {
+      console.error('Failed to queue report notifications:', notifyErr);
+    }
 
     // Log critical action
     await SecurityService.logCriticalAction(userId, 'REPORT_DEVICE', {

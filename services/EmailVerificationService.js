@@ -54,10 +54,11 @@ class EmailVerificationService {
             [userId, token, expiresAt]
           );
         } catch (insertErr) {
-          // Verification table not available; registration still succeeds
+          console.error('email_verification_tokens table may not exist. Run migration 012:', insertErr.message);
           return {
             success: false,
-            message: 'Email verification temporarily unavailable'
+            message: 'Email verification temporarily unavailable',
+            error: insertErr.message
           };
         }
 
@@ -105,9 +106,11 @@ class EmailVerificationService {
             [token]
           );
         } catch (queryErr) {
+          console.error('email_verification_tokens table query failed:', queryErr.message);
           return {
             success: false,
-            message: 'Email verification is currently unavailable'
+            message: 'Email verification is currently unavailable',
+            error: queryErr.message
           };
         }
 
@@ -169,7 +172,7 @@ class EmailVerificationService {
         <ul style="margin: 0; color: #374151; line-height: 1.8;">
           <li>Register your devices with proof of ownership</li>
           <li>Get admin verification for full protection</li>
-          <li>Use our public check to verify devices before purchase</li>
+          <li>If selling a device, ask the buyer to check it in your presence to verify its status</li>
           <li>Report stolen or lost devices instantly</li>
         </ul>
       </div>

@@ -392,8 +392,8 @@ class BackgroundJobs {
 // Create singleton instance
 const backgroundJobs = new BackgroundJobs();
 
-// Auto-start in production
-if (process.env.NODE_ENV === 'production') {
+// Auto-start in all non-test environments
+if (process.env.NODE_ENV !== 'test') {
   backgroundJobs.start();
 }
 

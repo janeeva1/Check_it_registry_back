@@ -42,27 +42,21 @@ class EnhancedNotificationService {
 
   // Send email notification
   async sendEmail(to, subject, htmlContent, textContent = null) {
-    if (process.env.NODE_ENV === 'test') return { success: true, messageId: 'test-skip' };
     if (!this.emailTransporter) {
-      return { success: false, reason: 'Email service not configured' };
+      throw new Error('Email service not configured (SMTP_HOST missing)');
     }
 
-    try {
-      const mailOptions = {
-        from: `"${process.env.APP_NAME || 'Prove Ownership'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-        to,
-        subject,
-        html: htmlContent,
-        text: textContent || htmlContent.replace(/<[^>]*>/g, '')
-      };
+    const mailOptions = {
+      from: `"${process.env.APP_NAME || 'Prove Ownership'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to,
+      subject,
+      html: htmlContent,
+      text: textContent || htmlContent.replace(/<[^>]*>/g, '')
+    };
 
-      const result = await this.emailTransporter.sendMail(mailOptions);
-      console.log('📧 Email sent successfully to:', to);
-      return { success: true, messageId: result.messageId };
-    } catch (error) {
-      console.error('❌ Error sending email:', error);
-      return { success: false, error: error.message };
-    }
+    const result = await this.emailTransporter.sendMail(mailOptions);
+    console.log('📧 Email sent successfully to:', to);
+    return { success: true, messageId: result.messageId };
   }
 
   // Send SMS notification (via Termii — device check alerts only)
@@ -362,7 +356,7 @@ class EnhancedNotificationService {
           <table cellpadding="6" cellspacing="0" style="font-size: 14px; color: #374151; width: 100%;">
             <tr>
               <td style="width: 50%; vertical-align: top;"><strong>Device Registry</strong><br><span style="color: #6B7280;">Secure registration system</span></td>
-              <td style="width: 50%; vertical-align: top;"><strong>Public Checks</strong><br><span style="color: #6B7280;">Verify device legitimacy</span></td>
+              <td style="width: 50%; vertical-align: top;"><strong>Security Checks</strong><br><span style="color: #6B7280;">Device status verification</span></td>
             </tr>
             <tr>
               <td style="width: 50%; vertical-align: top;"><strong>Theft Reports</strong><br><span style="color: #6B7280;">Quick reporting system</span></td>
@@ -384,7 +378,7 @@ class EnhancedNotificationService {
         ` : ''}
 
         <div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 8px; margin: 25px 0;">
-          <p style="margin: 0; color: #991B1B; font-size: 14px;"><strong>Security Tip:</strong> Always verify devices before purchasing from unknown sellers. Use our public check feature to ensure you're not buying stolen property.</p>
+          <p style="margin: 0; color: #991B1B; font-size: 14px;"><strong>Security Tip:</strong> When buying a used device, ask the seller to check the device status in your presence. This ensures the check is tied to their identity and location for accountability.</p>
         </div>
 
         <p>If you have any questions, our support team is here to help. Simply reply to this email or visit our help center.</p>

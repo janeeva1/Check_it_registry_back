@@ -469,11 +469,15 @@ router.post("/verify-device", authenticateToken, async (req, res) => {
           <li>You'll receive alerts for any suspicious activity</li>
         </ul>
       `;
-    await NotificationService.sendEmailDirect(
-      user.email,
-      "Device Verified Successfully - Prove Ownership",
-      EmailTemplate.wrapContent('Device Verified!', emailContent)
-    );
+    try {
+      await NotificationService.sendEmailDirect(
+        user.email,
+        "Device Verified Successfully - Prove Ownership",
+        EmailTemplate.wrapContent('Device Verified!', emailContent)
+      );
+    } catch (emailErr) {
+      console.warn("Failed to send verification success email:", emailErr.message);
+    }
 
     // Log device verification
     await Database.logAudit(
@@ -568,11 +572,15 @@ router.post('/verify-device-link', async (req, res) => {
           <p><strong>Verified on:</strong> ${new Date().toLocaleString()}</p>
         </div>
       `;
-    await NotificationService.sendEmailDirect(
-      user.email,
-      'Device Verified Successfully - Prove Ownership',
-      EmailTemplate.wrapContent('Device Verified!', emailContent)
-    );
+    try {
+      await NotificationService.sendEmailDirect(
+        user.email,
+        'Device Verified Successfully - Prove Ownership',
+        EmailTemplate.wrapContent('Device Verified!', emailContent)
+      );
+    } catch (emailErr) {
+      console.warn("Failed to send verification success email:", emailErr.message);
+    }
 
     // Log device verification
     await Database.logAudit(
@@ -726,11 +734,15 @@ router.post("/report-stolen", authenticateToken, async (req, res) => {
 
         <p>Keep your case ID <strong>${caseId}</strong> for reference.</p>
       `;
-    await NotificationService.sendEmailDirect(
-      user.email,
-      `Device Reported Stolen - Case ${caseId}`,
-      EmailTemplate.wrapContent('Device Reported Stolen', emailContent)
-    );
+    try {
+      await NotificationService.sendEmailDirect(
+        user.email,
+        `Device Reported Stolen - Case ${caseId}`,
+        EmailTemplate.wrapContent('Device Reported Stolen', emailContent)
+      );
+    } catch (emailErr) {
+      console.warn("Failed to send theft report email:", emailErr.message);
+    }
 
     // Log theft report
     await Database.logAudit(
@@ -829,11 +841,15 @@ router.post("/report-found", authenticateToken, async (req, res) => {
 
         <p>Case ID: <strong>${caseId}</strong></p>
       `;
-    await NotificationService.sendEmailDirect(
-      owner.email,
-      `Your Device May Have Been Found - Case ${caseId}`,
-      EmailTemplate.wrapContent('Device Possibly Found!', emailContent)
-    );
+    try {
+      await NotificationService.sendEmailDirect(
+        owner.email,
+        `Your Device May Have Been Found - Case ${caseId}`,
+        EmailTemplate.wrapContent('Device Possibly Found!', emailContent)
+      );
+    } catch (emailErr) {
+      console.warn("Failed to send found device notification:", emailErr.message);
+    }
 
     res.status(201).json({
       success: true,

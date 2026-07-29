@@ -125,6 +125,36 @@ router.post('/register', async (req, res) => {
         // Don't fail registration if email fails
       }
 
+      // Send welcome email
+      try {
+        const NotificationService = require('../services/NotificationService');
+        const EmailTemplate = require('../services/EmailTemplate');
+        const welcomeContent = `
+          <p>Hello <strong>${userData.name}</strong>,</p>
+          <p>Welcome to <strong>Prove Ownership</strong>, Nigeria's premier device registry and recovery system! We're excited to help you protect your valuable devices.</p>
+          <div style="background: #EFF6FF; border-left: 4px solid #2563EB; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <h3 style="color: #1E40AF; margin: 0 0 12px; font-size: 16px;">Get Started in 3 Easy Steps</h3>
+            <ol style="color: #374151; line-height: 2; margin: 0; padding-left: 20px;">
+              <li><strong>Register Your Devices:</strong> Add your phones, laptops, and other valuables to our secure registry</li>
+              <li><strong>Verify Ownership:</strong> Complete the verification process to ensure maximum protection</li>
+              <li><strong>Stay Protected:</strong> Get instant alerts if someone checks your device</li>
+            </ol>
+          </div>
+          <p>If you have any questions, our support team is here to help.</p>
+          <p>Stay secure,<br><strong>The Prove Ownership Team</strong></p>
+        `;
+        const wrappedHtml = EmailTemplate.wrapContent('Welcome to Prove Ownership!', welcomeContent, {
+          actionButton: { url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/register-device`, text: 'Register Your First Device' }
+        });
+        await NotificationService.sendEmailDirect(
+          userData.email,
+          'Welcome to Prove Ownership!',
+          wrappedHtml
+        );
+      } catch (welcomeErr) {
+        console.error('Welcome email error:', welcomeErr);
+      }
+
       // Log successful registration
       await Database.logAudit(
         userId,

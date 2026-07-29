@@ -437,11 +437,15 @@ router.post('/resend-device-verification/:id', async (req, res) => {
     const fullHtml = EmailTemplate.wrapContent('Verify Your Device', content, {
       actionButton: { url: verifyLink, text: 'Verify Ownership' }
     });
-    await NotificationService.sendEmailDirect(
-      owner.email,
-      'Reminder: Verify Your Device Ownership - Prove Ownership',
-      fullHtml
-    );
+    try {
+      await NotificationService.sendEmailDirect(
+        owner.email,
+        'Reminder: Verify Your Device Ownership - Prove Ownership',
+        fullHtml
+      );
+    } catch (emailErr) {
+      console.warn("Failed to resend verification email:", emailErr.message);
+    }
 
     // Log audit
     await Database.logAudit(

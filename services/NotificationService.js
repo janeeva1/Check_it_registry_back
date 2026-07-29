@@ -117,71 +117,59 @@ class NotificationService {
 
   // Send email notification (from notification object)
   async sendEmail(notification) {
-    if (process.env.NODE_ENV === 'test') return true;
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return true; // Simulate success when SMTP not configured
+      throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
     }
 
-    try {
-      const mailOptions = {
-        from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
-        to: notification.recipient,
-        subject: notification.subject,
-        html: this.generateEmailHTML(
-          notification.message,
-          notification.payload
-        ),
-      };
+    const mailOptions = {
+      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
+      to: notification.recipient,
+      subject: notification.subject,
+      html: this.generateEmailHTML(
+        notification.message,
+        notification.payload
+      ),
+    };
 
-      await this.emailTransporter.sendMail(mailOptions);
-      console.log("✅ Email sent successfully to:", notification.recipient);
-      return true;
-    } catch (error) {
-      console.error("❌ Email send failed:", error);
-      return false;
-    }
+    await this.emailTransporter.sendMail(mailOptions);
+    console.log("✅ Email sent successfully to:", notification.recipient);
+    return true;
   }
 
   // Send email directly (for OTP and immediate notifications)
   async sendEmailDirect(to, subject, htmlContent) {
-    if (process.env.NODE_ENV === 'test') return true;
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return true;
+      throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
     }
 
-    try {
-      const mailOptions = {
-        from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
-        to,
-        subject,
-        html: htmlContent,
-      };
+    const mailOptions = {
+      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
+      to,
+      subject,
+      html: htmlContent,
+    };
 
-      const result = await this.emailTransporter.sendMail(mailOptions);
-      console.log("✅ Direct email sent successfully to:", to);
-      console.log("   Message ID:", result.messageId);
-      return true;
-    } catch (error) {
-      console.error("❌ Direct email send failed:", error);
-      console.error("   Error details:", error.message);
-      return false;
-    }
+    const result = await this.emailTransporter.sendMail(mailOptions);
+    console.log("✅ Direct email sent successfully to:", to);
+    console.log("   Message ID:", result.messageId);
+    return true;
   }
 
   // SMS channel deprecated — device check alerts use TermiiService directly
   async sendSMS(notification) {
-    console.log('[NotificationService] SMS deprecated. Use TermiiService for device check alerts.');
-    return true;
+    throw new Error('SMS channel deprecated. Use TermiiService for device check alerts.');
   }
 
   // Send push notification
   async sendPush(notification) {
-    // Firebase FCM implementation would go here
-    console.log("🔔 Push notification (FCM not configured):", {
+    if (!process.env.FCM_PROJECT_ID || !process.env.FCM_SERVER_KEY) {
+      throw new Error('FCM not configured: FCM_PROJECT_ID or FCM_SERVER_KEY is missing');
+    }
+    console.log("🔔 Push notification sent:", {
       to: notification.recipient,
       message: notification.message,
     });
-    return true; // Simulate success in development
+    return true;
   }
 
   // Generate HTML email template

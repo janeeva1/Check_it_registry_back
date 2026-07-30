@@ -167,10 +167,14 @@ class EmailVerificationService {
     
     const content = `
       <p>Hello <strong>${user.name}</strong>,</p>
-      <p>Thank you for registering with <strong>Prove Ownership</strong>. To complete your registration and start protecting your devices, please verify your email address.</p>
+      <p>Thank you for registering with <strong>Prove Ownership</strong>. To complete your registration and start protecting your devices, please verify your email address by clicking the button below.</p>
       
-      <p style="color: #6B7280;">Or copy and paste this link into your browser:</p>
-      <p style="word-break: break-all; color: #2563EB; font-size: 13px; background: #F3F4F6; padding: 10px; border-radius: 6px;">${verificationUrl}</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${verificationUrl}" target="_blank" style="display: inline-block; padding: 16px 40px; font-size: 16px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);">Verify Email Address</a>
+      </div>
+      
+      <p style="color: #6B7280; font-size: 14px;">If the button above doesn't work, copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #2563EB; font-size: 13px; background: #F3F4F6; padding: 12px; border-radius: 6px; font-family: monospace;">${verificationUrl}</p>
       
       <p style="color: #6B7280;">This verification link will expire in <strong>24 hours</strong>.</p>
       
@@ -187,9 +191,7 @@ class EmailVerificationService {
       <p style="color: #9CA3AF; font-size: 13px;">If you didn't create an account with Prove Ownership, please ignore this email.</p>
     `;
 
-    const fullHtml = EmailTemplate.wrapContent('Welcome to Prove Ownership!', content, {
-      actionButton: { url: verificationUrl, text: 'Verify Email Address' }
-    });
+    const fullHtml = EmailTemplate.wrapContent('Welcome to Prove Ownership!', content);
 
     await NotificationService.sendEmailDirect(
       user.email,

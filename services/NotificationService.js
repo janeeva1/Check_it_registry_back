@@ -1,39 +1,16 @@
 // Notification Service - Email and Push Notifications
-const nodemailer = require("nodemailer");
+const { Resend } = require('resend');
 const Database = require("../config");
 const EmailTemplate = require("./EmailTemplate");
 
 class NotificationService {
   constructor() {
-    const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
-    
-    this.emailTransporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: smtpPort,
-      secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      connectionTimeout: 10000,
-      socketTimeout: 20000,
-    });
-
-    this.verifySmtpConnection();
-  }
-
-  async verifySmtpConnection() {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.warn('⚠️  SMTP not fully configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
-      return;
-    }
-    try {
-      await this.emailTransporter.verify();
-      console.log('✅ SMTP connection verified to', process.env.SMTP_HOST);
-    } catch (error) {
-      console.error('❌ SMTP connection FAILED:', error.message);
-      console.error('   Host:', process.env.SMTP_HOST, 'Port:', process.env.SMTP_PORT);
-      console.error('   Check your SMTP credentials in .env');
+    const apiKey = process.env.RESEND_API_KEY;
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
+      console.log('✅ Resend client initialized');
+    } else {
+      console.warn('⚠️  RESEND_API_KEY not set. Email sending disabled.');
     }
   }
 
@@ -135,27 +112,22 @@ class NotificationService {
 
   // Send email notification (from notification object)
   async sendEmail(notification) {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
+    if (!this.resend) {
+      throw new Error('Resend not configured: RESEND_API_KEY is missing');
     }
 
-    const fromAddr = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
-    if (!fromAddr.includes('@')) {
+    const fromAddr = process.env.MAIL_FROM_ADDRESS;
+    if (!fromAddr || !fromAddr.includes('@')) {
       throw new Error(`Invalid from address "${fromAddr}". Set MAIL_FROM_ADDRESS in .env`);
     }
 
-    const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${fromAddr}>`,
-      to: notification.recipient,
-      subject: notification.subject,
-      html: this.generateEmailHTML(
-        notification.message,
-        notification.payload
-      ),
-    };
-
     try {
-      await this.emailTransporter.sendMail(mailOptions);
+      const result = await this.resend.emails.send({
+        from: `${process.env.MAIL_FROM_NAME || 'Prove Ownership'} <${fromAddr}>`,
+        to: notification.recipient,
+        subject: notification.subject,
+        html: this.generateEmailHTML(notification.message, notification.payload),
+      });
       console.log("✅ Email sent successfully to:", notification.recipient);
       return true;
     } catch (error) {
@@ -166,26 +138,23 @@ class NotificationService {
 
   // Send email directly (for OTP and immediate notifications)
   async sendEmailDirect(to, subject, htmlContent) {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
+    if (!this.resend) {
+      throw new Error('Resend not configured: RESEND_API_KEY is missing');
     }
 
-    const fromAddr = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
-    if (!fromAddr.includes('@')) {
+    const fromAddr = process.env.MAIL_FROM_ADDRESS;
+    if (!fromAddr || !fromAddr.includes('@')) {
       throw new Error(`Invalid from address "${fromAddr}". Set MAIL_FROM_ADDRESS in .env`);
     }
 
-    const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${fromAddr}>`,
-      to,
-      subject,
-      html: htmlContent,
-    };
-
     try {
-      const result = await this.emailTransporter.sendMail(mailOptions);
+      const result = await this.resend.emails.send({
+        from: `${process.env.MAIL_FROM_NAME || 'Prove Ownership'} <${fromAddr}>`,
+        to,
+        subject,
+        html: htmlContent,
+      });
       console.log("✅ Direct email sent successfully to:", to);
-      console.log("   Message ID:", result.messageId);
       return true;
     } catch (error) {
       console.error(`❌ Direct email send failed to ${to}:`, error.message);

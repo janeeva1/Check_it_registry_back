@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const TermiiService = require('./TermiiService');
 const webpush = require('web-push');
 const { logActivity } = require('./AuditService');
@@ -6,36 +6,20 @@ const EmailTemplate = require('./EmailTemplate');
 
 class EnhancedNotificationService {
   constructor() {
-    this.emailTransporter = null;
+    this.resend = null;
     this.initializeServices();
   }
 
   async initializeServices() {
     try {
-      // Initialize email service
-      if (process.env.SMTP_HOST) {
-        this.emailTransporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT) || 587,
-          secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (parseInt(process.env.SMTP_PORT) || 587) === 465,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          },
-          connectionTimeout: 10000,
-          socketTimeout: 20000,
-        });
-
-        // Verify SMTP connection
-        try {
-          await this.emailTransporter.verify();
-          console.log('✅ Enhanced SMTP connection verified to', process.env.SMTP_HOST);
-        } catch (verifyErr) {
-          console.error('❌ Enhanced SMTP connection FAILED:', verifyErr.message);
-        }
+      const apiKey = process.env.RESEND_API_KEY;
+      if (apiKey) {
+        this.resend = new Resend(apiKey);
+        console.log('✅ Enhanced Resend client initialized');
+      } else {
+        console.warn('⚠️  Enhanced: RESEND_API_KEY not set. Email sending disabled.');
       }
 
-      // Initialize push notifications
       if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
         webpush.setVapidDetails(
           'mailto:' + process.env.ADMIN_EMAIL,
@@ -52,27 +36,24 @@ class EnhancedNotificationService {
 
   // Send email notification
   async sendEmail(to, subject, htmlContent, textContent = null) {
-    if (!this.emailTransporter) {
-      throw new Error('Email service not configured (SMTP_HOST missing)');
+    if (!this.resend) {
+      throw new Error('Resend not configured: RESEND_API_KEY is missing');
     }
 
-    const fromAddr = process.env.SMTP_FROM || process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
-    if (!fromAddr.includes('@')) {
-      throw new Error(`Invalid from address "${fromAddr}". Set SMTP_FROM or MAIL_FROM_ADDRESS in .env`);
+    const fromAddr = process.env.MAIL_FROM_ADDRESS;
+    if (!fromAddr || !fromAddr.includes('@')) {
+      throw new Error(`Invalid from address "${fromAddr}". Set MAIL_FROM_ADDRESS in .env`);
     }
-
-    const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || process.env.APP_NAME || 'Prove Ownership'}" <${fromAddr}>`,
-      to,
-      subject,
-      html: htmlContent,
-      text: textContent || htmlContent.replace(/<[^>]*>/g, '')
-    };
 
     try {
-      const result = await this.emailTransporter.sendMail(mailOptions);
+      const result = await this.resend.emails.send({
+        from: `${process.env.MAIL_FROM_NAME || 'Prove Ownership'} <${fromAddr}>`,
+        to,
+        subject,
+        html: htmlContent,
+      });
       console.log('📧 Email sent successfully to:', to);
-      return { success: true, messageId: result.messageId };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error(`❌ Enhanced email send failed to ${to}:`, error.message);
       throw error;

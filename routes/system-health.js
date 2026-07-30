@@ -125,7 +125,7 @@ async function checkDatabaseHealth() {
 // Email system health check
 async function checkEmailHealth() {
   try {
-    const emailConfigured = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+    const emailConfigured = !!(process.env.RESEND_API_KEY);
 
     if (!emailConfigured) {
       return {
@@ -155,8 +155,7 @@ async function checkEmailHealth() {
     return {
       status: failureRate > 20 ? "warning" : "healthy",
       configured: true,
-      smtp_host: process.env.SMTP_HOST,
-      smtp_port: process.env.SMTP_PORT,
+      provider: 'Resend',
       from_address: process.env.MAIL_FROM_ADDRESS,
       last_24h_stats: stats,
       failure_rate_percent: Math.round(failureRate * 100) / 100,

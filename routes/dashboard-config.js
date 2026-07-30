@@ -22,7 +22,7 @@ router.get('/config', async (req, res) => {
         frontend_url: process.env.FRONTEND_URL || 'http://localhost:5173'
       },
       features: {
-        email_notifications: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+        email_notifications: !!(process.env.RESEND_API_KEY),
         sms_notifications: !!(process.env.TERMII_API_KEY),
         push_notifications: !!process.env.FCM_SERVER_KEY,
         file_uploads: true,

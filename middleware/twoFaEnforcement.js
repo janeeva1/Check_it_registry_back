@@ -72,7 +72,7 @@ const requireMFA = async (req, res, next) => {
   }
 };
 
-// Enforce 2FA setup completion — blocks admin/LEA until 2FA is enabled
+// Enforce 2FA setup completion — warns admin/LEA but does not block
 const require2FASetup = async (req, res, next) => {
   try {
     if (!req.user) return next();
@@ -88,11 +88,7 @@ const require2FASetup = async (req, res, next) => {
     const mfaEnabled = user?.two_factor_enabled || user?.two_fa_enabled;
 
     if (!mfaEnabled) {
-      return res.status(403).json({
-        error: 'Two-factor authentication setup required',
-        requiresAction: '2fa_setup',
-        message: 'Admin and LEA accounts must enable 2FA. Visit PUT /api/profile/2fa to enable.'
-      });
+      console.warn(`[2FA] User ${req.user.id} (${req.user.role}) has not enabled 2FA — allowing pass-through`);
     }
 
     next();

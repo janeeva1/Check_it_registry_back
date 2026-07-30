@@ -137,4 +137,24 @@ router.get('/onboardings/stats', async (req, res) => {
   }
 });
 
+// POST /api/business/payout-settings - Update payout settings
+router.post('/payout-settings', async (req, res) => {
+  try {
+    const { bank_name, account_number, account_name } = req.body;
+    if (!account_number || !account_name) {
+      return res.status(400).json({ error: 'Account number and name are required' });
+    }
+    await Database.update('users', {
+      payout_bank_name: bank_name,
+      payout_account_number: account_number,
+      payout_account_name: account_name,
+      updated_at: new Date()
+    }, 'id = ?', [req.user.id]);
+    res.json({ message: 'Payout settings updated successfully' });
+  } catch (error) {
+    console.error('Payout settings error:', error);
+    res.status(500).json({ error: 'Failed to update payout settings' });
+  }
+});
+
 module.exports = router;

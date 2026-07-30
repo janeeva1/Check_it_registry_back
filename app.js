@@ -299,6 +299,9 @@ app.post('/api/admin/jobs/run', async (req, res) => {
   }
 });
 
+// Response envelope middleware — wraps API responses in consistent { success, data } shape
+app.use(responseEnvelope);
+
 // Landing page — shows errors, blocked IPs, system status
 app.get('/', (req, res) => {
   res.send(errorStore.renderLandingPage(req));

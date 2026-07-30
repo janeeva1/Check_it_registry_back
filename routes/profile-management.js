@@ -549,4 +549,74 @@ router.put('/privacy', authenticateToken, async (req, res) => {
   }
 });
 
+// Update user profile (name, phone, region)
+router.put('/update', authenticateToken, async (req, res) => {
+  try {
+    const { name, phone, region } = req.body;
+    const updateData = { updated_at: new Date() };
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (region !== undefined) updateData.region = region;
+
+    await Database.update('users', updateData, 'id = ?', [req.user.id]);
+    const user = await Database.selectOne('users', 'id, name, email, phone, region, role', 'id = ?', [req.user.id]);
+    res.json({ message: 'Profile updated successfully', user });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Get user profile stats
+router.get('/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [[{ deviceCount }]] = await Database.query(
+      'SELECT COUNT(*) as deviceCount FROM devices WHERE user_id = ?', [userId]
+    );
+    const [[{ reportCount }]] = await Database.query(
+      'SELECT COUNT(*) as reportCount FROM reports WHERE reporter_id = ?', [userId]
+    );
+    const [[{ transferCount }]] = await Database.query(
+      'SELECT COUNT(*) as transferCount FROM ownership_transfers WHERE from_user_id = ? OR to_user_id = ?', [userId, userId]
+    );
+    const [[{ listingCount }]] = await Database.query(
+      'SELECT COUNT(*) as listingCount FROM marketplace_listings WHERE seller_id = ?', [userId]
+    );
+    const user = await Database.selectOne('users', 'created_at', 'id = ?', [userId]);
+
+    res.json({
+      stats: {
+        devices: deviceCount,
+        reports: reportCount,
+        transfers: transferCount,
+        listings: listingCount,
+        memberSince: user?.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching profile stats:', error);
+    res.status(500).json({ error: 'Failed to fetch profile stats' });
+  }
+});
+
+// Get user preferences
+router.get('/preferences', authenticateToken, async (req, res) => {
+  try {
+    const rows = await Database.query(`
+      SELECT
+        email_notifications, sms_notifications, push_notifications,
+        device_alerts, transfer_notifications, verification_notifications,
+        report_updates, marketing_emails,
+        theme_preference, language_preference, timezone,
+        two_factor_enabled, session_timeout, auto_logout_enabled
+      FROM users WHERE id = ?
+    `, [req.user.id]);
+    res.json({ preferences: rows[0] || {} });
+  } catch (error) {
+    console.error('Error fetching preferences:', error);
+    res.status(500).json({ error: 'Failed to fetch preferences' });
+  }
+});
+
 module.exports = router;

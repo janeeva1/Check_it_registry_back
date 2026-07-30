@@ -286,6 +286,17 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Check email verification
+    const emailVerificationOptional = process.env.EMAIL_VERIFICATION_REQUIRED === 'false';
+    if (!user.verified_at && !emailVerificationOptional) {
+      return res.status(403).json({
+        error: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+        needs_verification: true,
+        email: user.email,
+        user_id: user.id
+      });
+    }
+
     // Check device trust status
     const enableOtp = process.env.ENABLE_EMAIL_OTP !== 'false';
     const deviceFingerprint = DeviceSecurityService.generateDeviceFingerprint(req);
@@ -922,6 +933,26 @@ router.post('/resend-device-otp', async (req, res) => {
   } catch (error) {
     console.error('Resend device OTP error:', error);
     res.status(500).json({ error: 'Failed to resend verification code' });
+  }
+});
+
+// DELETE /api/auth/account - Delete user account
+router.delete('/account', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    await Database.transaction(async (connection) => {
+      await connection.execute('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
+      await connection.execute('DELETE FROM notifications WHERE user_id = ?', [userId]);
+      await connection.execute('DELETE FROM api_keys WHERE user_id = ?', [userId]);
+      await connection.execute('UPDATE devices SET user_id = NULL, status = "unregistered" WHERE user_id = ?', [userId]);
+      await connection.execute('DELETE FROM users WHERE id = ?', [userId]);
+    });
+
+    res.json({ message: 'Account deleted successfully' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
   }
 });
 

@@ -292,4 +292,95 @@ router.put('/payment-provider', requireAdmin, async (req, res) => {
   }
 });
 
+// Fraud Detection Alerts
+router.get('/fraud-alerts/stats', requireAdmin, async (req, res) => {
+  try {
+    const [[{ total }]] = await Database.query(`SELECT COUNT(*) as total FROM suspicious_activity_alerts`);
+    const [[{ new: newCount }]] = await Database.query(
+      `SELECT COUNT(*) as \`new\` FROM suspicious_activity_alerts WHERE status = 'pending'`
+    );
+    const [[{ critical }]] = await Database.query(
+      `SELECT COUNT(*) as critical FROM suspicious_activity_alerts WHERE severity IN ('high','critical')`
+    );
+    const [[{ resolved }]] = await Database.query(
+      `SELECT COUNT(*) as resolved FROM suspicious_activity_alerts WHERE status IN ('resolved','false_positive')`
+    );
+    res.json({ total, new: newCount, critical, resolved });
+  } catch (error) {
+    console.error('Fraud alerts stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch fraud alert stats' });
+  }
+});
+
+router.get('/fraud-alerts', requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    const alerts = await Database.query(`
+      SELECT
+        a.id,
+        a.alert_type as monitor_name,
+        a.severity,
+        a.description,
+        a.status,
+        a.created_at as flagged_at,
+        a.reviewed_at,
+        a.reviewed_by,
+        a.resolution_notes as notes,
+        a.auto_generated,
+        dc.query,
+        dc.ip_address,
+        dc.user_agent,
+        dc.result,
+        d.imei, d.serial, d.brand, d.model,
+        u.name as user_name,
+        u.email as user_email,
+        u.id as user_id
+      FROM suspicious_activity_alerts a
+      LEFT JOIN device_checks dc ON a.device_check_id = dc.id
+      LEFT JOIN devices d ON a.device_id = d.id
+      LEFT JOIN users u ON d.user_id = u.id
+      WHERE a.status IN ('pending', 'investigating')
+      ORDER BY a.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
+
+    const mapped = alerts.map(a => ({
+      ...a,
+      risk_score: a.severity === 'critical' ? 90 : a.severity === 'high' ? 70 : a.severity === 'medium' ? 45 : 20,
+      status: a.status === 'pending' ? 'new' : a.status === 'investigating' ? 'reviewing' : a.status === 'resolved' ? 'resolved' : 'dismissed'
+    }));
+
+    res.json({ alerts: mapped });
+  } catch (error) {
+    console.error('Fraud alerts list error:', error);
+    res.status(500).json({ error: 'Failed to fetch fraud alerts' });
+  }
+});
+
+router.put('/fraud-alerts/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const statusMap = { new: 'pending', reviewing: 'investigating', resolved: 'resolved', dismissed: 'false_positive' };
+    const dbStatus = statusMap[status] || 'pending';
+
+    await Database.update('suspicious_activity_alerts',
+      { status: dbStatus, reviewed_by: req.user.id, reviewed_at: new Date() },
+      'id = ?', [id]
+    );
+
+    await Database.logAudit(req.user.id, 'FRAUD_ALERT_UPDATED', 'suspicious_activity_alerts', id,
+      null, { status }, req.ip);
+
+    res.json({ success: true, id, status });
+  } catch (error) {
+    console.error('Fraud alert update error:', error);
+    res.status(500).json({ error: 'Failed to update fraud alert' });
+  }
+});
+
 module.exports = router;

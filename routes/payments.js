@@ -68,6 +68,119 @@ router.post('/charge', authenticateToken, async (req, res) => {
   }
 });
 
+// Initiate payment (mobile money, used by mobile checkout)
+router.post('/initiate', authenticateToken, async (req, res) => {
+  try {
+    const PaymentService = require('../services/PaymentService');
+    const Database = require('../config.js');
+    const { amount, phone, listing_id, type } = req.body;
+
+    if (!amount || !phone) {
+      return res.status(400).json({ error: 'Amount and phone are required' });
+    }
+
+    const reference = 'PAY-' + req.user.id + '-' + Date.now();
+    const transaction = await PaymentService.createTransaction(
+      req.user.id, amount, type || 'marketplace_purchase', null, { reference, listing_id, phone }
+    );
+
+    await Database.update('transactions', {
+      reference,
+      updated_at: new Date()
+    }, 'id = ?', [transaction.id]);
+
+    res.json({
+      success: true,
+      reference,
+      transactionId: transaction.id,
+      message: 'Payment initiated. Check your phone to complete.'
+    });
+  } catch (error) {
+    console.error('Initiate payment error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Get payment history (mobile)
+router.get('/history', authenticateToken, async (req, res) => {
+  try {
+    const Database = require('../config.js');
+    const userId = req.user.id;
+    const { limit = 50, offset = 0 } = req.query;
+
+    const rows = await Database.query(`
+      SELECT id, type, amount, status, reference, created_at
+      FROM transactions
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `, [userId, parseInt(limit), parseInt(offset)]);
+
+    res.json(rows.map(r => ({
+      id: r.id,
+      type: r.type === 'marketplace_purchase' ? 'payment' : r.type,
+      amount: parseFloat(r.amount),
+      status: r.status,
+      reference: r.reference || r.id,
+      created_at: r.created_at,
+    })));
+  } catch (err) {
+    console.error('Get payment history error:', err);
+    res.status(500).json({ error: 'Failed to fetch payment history' });
+  }
+});
+
+// Confirm payment (mobile)
+router.post('/confirm', authenticateToken, async (req, res) => {
+  try {
+    const Database = require('../config.js');
+    const { reference, listing_id } = req.body;
+
+    if (!reference) {
+      return res.status(400).json({ error: 'Reference is required' });
+    }
+
+    await Database.update('transactions', {
+      status: 'completed',
+      updated_at: new Date()
+    }, 'reference = ? AND user_id = ?', [reference, req.user.id]);
+
+    res.json({ success: true, message: 'Payment confirmed successfully' });
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Payment callback (mobile)
+router.post('/callback', async (req, res) => {
+  try {
+    const Database = require('../config.js');
+    const { reference, status } = req.body;
+
+    if (!reference) {
+      return res.status(400).json({ error: 'Reference is required' });
+    }
+
+    if (status === 'success' || status === 'completed') {
+      await Database.update('transactions', {
+        status: 'completed',
+        updated_at: new Date()
+      }, 'reference = ?', [reference]);
+    } else {
+      await Database.update('transactions', {
+        status: 'failed',
+        updated_at: new Date()
+      }, 'reference = ?', [reference]);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Payment callback error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get Wallet Balance
 router.get('/balance', authenticateToken, async (req, res) => {
   try {

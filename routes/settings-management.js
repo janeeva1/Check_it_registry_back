@@ -57,6 +57,61 @@ router.get('/preferences', authenticateToken, async (req, res) => {
   }
 });
 
+// Update all preferences (bulk, used by mobile)
+router.put('/preferences', authenticateToken, async (req, res) => {
+  try {
+    const {
+      email_notifications,
+      sms_notifications,
+      push_notifications,
+      device_alerts,
+      transfer_notifications,
+      verification_notifications,
+      report_updates,
+      marketing_emails,
+      theme_preference,
+      language_preference,
+      timezone,
+      dark_mode,
+    } = req.body;
+
+    await Database.query(`
+      UPDATE users SET
+        email_notifications = COALESCE(?, email_notifications),
+        sms_notifications = COALESCE(?, sms_notifications),
+        push_notifications = COALESCE(?, push_notifications),
+        device_alerts = COALESCE(?, device_alerts),
+        transfer_notifications = COALESCE(?, transfer_notifications),
+        verification_notifications = COALESCE(?, verification_notifications),
+        report_updates = COALESCE(?, report_updates),
+        marketing_emails = COALESCE(?, marketing_emails),
+        theme_preference = COALESCE(?, theme_preference),
+        language_preference = COALESCE(?, language_preference),
+        timezone = COALESCE(?, timezone),
+        updated_at = NOW()
+      WHERE id = ?
+    `, [
+      email_notifications !== undefined ? Boolean(email_notifications) : null,
+      sms_notifications !== undefined ? Boolean(sms_notifications) : null,
+      push_notifications !== undefined ? Boolean(push_notifications) : null,
+      device_alerts !== undefined ? Boolean(device_alerts) : null,
+      transfer_notifications !== undefined ? Boolean(transfer_notifications) : null,
+      verification_notifications !== undefined ? Boolean(verification_notifications) : null,
+      report_updates !== undefined ? Boolean(report_updates) : null,
+      marketing_emails !== undefined ? Boolean(marketing_emails) : null,
+      theme_preference !== undefined ? theme_preference : null,
+      language_preference !== undefined ? language_preference : null,
+      timezone !== undefined ? timezone : null,
+      req.user.id
+    ]);
+
+    res.json({ message: 'Preferences updated successfully' });
+  } catch (error) {
+    console.error('Error updating preferences:', error);
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
 // Update notification preferences
 router.put('/notifications', authenticateToken, async (req, res) => {
   try {

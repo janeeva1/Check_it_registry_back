@@ -655,8 +655,6 @@ router.post("/cleanup-expired", async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // =====================
 // Ownership history list
 // =====================
@@ -910,3 +908,5 @@ router.get('/my-transfers', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch transfers' });
   }
 });
+
+module.exports = router;

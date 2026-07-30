@@ -16,13 +16,23 @@ class EnhancedNotificationService {
       if (process.env.SMTP_HOST) {
         this.emailTransporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST,
-          port: process.env.SMTP_PORT || 587,
-          secure: process.env.SMTP_SECURE === 'true',
+          port: parseInt(process.env.SMTP_PORT) || 587,
+          secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (parseInt(process.env.SMTP_PORT) || 587) === 465,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
-          }
+          },
+          connectionTimeout: 10000,
+          socketTimeout: 20000,
         });
+
+        // Verify SMTP connection
+        try {
+          await this.emailTransporter.verify();
+          console.log('✅ Enhanced SMTP connection verified to', process.env.SMTP_HOST);
+        } catch (verifyErr) {
+          console.error('❌ Enhanced SMTP connection FAILED:', verifyErr.message);
+        }
       }
 
       // Initialize push notifications
@@ -46,17 +56,27 @@ class EnhancedNotificationService {
       throw new Error('Email service not configured (SMTP_HOST missing)');
     }
 
+    const fromAddr = process.env.SMTP_FROM || process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
+    if (!fromAddr.includes('@')) {
+      throw new Error(`Invalid from address "${fromAddr}". Set SMTP_FROM or MAIL_FROM_ADDRESS in .env`);
+    }
+
     const mailOptions = {
-      from: `"${process.env.APP_NAME || 'Prove Ownership'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      from: `"${process.env.MAIL_FROM_NAME || process.env.APP_NAME || 'Prove Ownership'}" <${fromAddr}>`,
       to,
       subject,
       html: htmlContent,
       text: textContent || htmlContent.replace(/<[^>]*>/g, '')
     };
 
-    const result = await this.emailTransporter.sendMail(mailOptions);
-    console.log('📧 Email sent successfully to:', to);
-    return { success: true, messageId: result.messageId };
+    try {
+      const result = await this.emailTransporter.sendMail(mailOptions);
+      console.log('📧 Email sent successfully to:', to);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error(`❌ Enhanced email send failed to ${to}:`, error.message);
+      throw error;
+    }
   }
 
   // Send SMS notification (via Termii — device check alerts only)

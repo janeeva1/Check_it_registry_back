@@ -37,35 +37,41 @@ router.post('/lookup', authenticateToken, async (req, res) => {
 // POST /api/kyc/verify - Submit KYC
 router.post('/verify', authenticateToken, async (req, res) => {
   try {
-    // Handle file upload
-    const upload = FileUploadService.getUploadMiddleware('selfie_image');
-    
-    upload(req, res, async (err) => {
-      if (err) return res.status(400).json({ error: err.message });
-      
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.startsWith('multipart/')) {
+      // File upload path (web frontend with selfie)
+      const upload = FileUploadService.getUploadMiddleware('selfie_image');
+
+      upload(req, res, async (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+
+        const { nin } = req.body;
+        if (!nin) return res.status(400).json({ error: 'NIN is required' });
+        if (!req.file) return res.status(400).json({ error: 'Live selfie is required' });
+
+        try {
+          const FileUploadService = require('../services/FileUploadService');
+          const result = await FileUploadService.processSingleFile(
+            req.file.buffer, req.file.originalname, req.file.mimetype, 'selfie_image', req.user.id
+          );
+
+          const filePath = path.join(__dirname, '..', result.url);
+          const serviceResult = await KYCService.initiateVerification(req.user.id, nin, filePath);
+          res.json(serviceResult);
+        } catch (serviceError) {
+          console.error(serviceError);
+          res.status(400).json({ error: serviceError.message });
+        }
+      });
+    } else {
+      // JSON path (mobile without file)
       const { nin } = req.body;
       if (!nin) return res.status(400).json({ error: 'NIN is required' });
-      if (!req.file) return res.status(400).json({ error: 'Live selfie is required' });
 
-      try {
-        // Process and save selfie to disk with image optimization
-        const FileUploadService = require('../services/FileUploadService');
-        const result = await FileUploadService.processSingleFile(
-          req.file.buffer, req.file.originalname, req.file.mimetype, 'selfie_image', req.user.id
-        );
-
-        const selfieUrl = result.url;
-        const filePath = path.join(__dirname, '..', result.url);
-
-        // Pass the absolute path to service for processing
-        const serviceResult = await KYCService.initiateVerification(req.user.id, nin, filePath);
-        res.json(serviceResult);
-      } catch (serviceError) {
-        console.error(serviceError);
-        res.status(400).json({ error: serviceError.message });
-      }
-    });
-
+      const serviceResult = await KYCService.initiateVerification(req.user.id, nin, null);
+      res.json(serviceResult);
+    }
   } catch (error) {
     console.error('KYC Route Error:', error);
     res.status(500).json({ error: 'Internal Server Error' });

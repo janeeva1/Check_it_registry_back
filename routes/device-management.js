@@ -45,10 +45,22 @@ router.get("/", authenticateToken, async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
+    const statusFilter = req.query.status;
+
+    let whereClause = 'user_id = ?';
+    let whereParams = [userId];
+
+    if (statusFilter) {
+      const statuses = statusFilter.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        whereClause += ` AND status IN (${statuses.map(() => '?').join(',')})`;
+        whereParams.push(...statuses);
+      }
+    }
 
     const devices = await Database.query(
-      `SELECT SQL_CALC_FOUND_ROWS * FROM devices WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [userId, limit, offset]
+      `SELECT SQL_CALC_FOUND_ROWS * FROM devices WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...whereParams, limit, offset]
     );
 
     const [{ total }] = await Database.query(`SELECT FOUND_ROWS() as total`);

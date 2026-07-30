@@ -11,6 +11,50 @@ const router = express.Router();
 router.use(authenticateToken);
 router.use(requireRole(['admin']));
 
+// Get system settings (flat key-value, used by mobile)
+router.get('/settings', async (req, res) => {
+  try {
+    const rows = await Database.query(
+      'SELECT setting_key, setting_value FROM system_settings ORDER BY setting_key'
+    );
+    const settings = {};
+    for (const row of rows) {
+      const val = row.setting_value;
+      if (val === 'true' || val === 'false') {
+        settings[row.setting_key] = val === 'true';
+      } else if (!isNaN(Number(val))) {
+        settings[row.setting_key] = Number(val);
+      } else {
+        settings[row.setting_key] = val;
+      }
+    }
+    res.json({ settings });
+  } catch (error) {
+    console.error('Error fetching system settings:', error);
+    res.status(500).json({ error: 'Failed to fetch system settings' });
+  }
+});
+
+// Update system settings (flat key-value, used by mobile)
+router.put('/settings', async (req, res) => {
+  try {
+    const { settings } = req.body;
+    if (!settings || typeof settings !== 'object') {
+      return res.status(400).json({ error: 'Invalid settings format' });
+    }
+    for (const [key, value] of Object.entries(settings)) {
+      await Database.query(
+        'UPDATE system_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?',
+        [String(value), key]
+      );
+    }
+    res.json({ message: 'Settings updated successfully' });
+  } catch (error) {
+    console.error('Error updating system settings:', error);
+    res.status(500).json({ error: 'Failed to update system settings' });
+  }
+});
+
 // Get comprehensive system overview
 router.get('/overview', async (req, res) => {
   try {

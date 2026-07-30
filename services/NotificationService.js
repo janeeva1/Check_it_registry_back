@@ -5,18 +5,36 @@ const EmailTemplate = require("./EmailTemplate");
 
 class NotificationService {
   constructor() {
-    // Email transporter setup
+    const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
+    
     this.emailTransporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+      port: smtpPort,
+      secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      connectionTimeout: 5000,
-      socketTimeout: 10000,
+      connectionTimeout: 10000,
+      socketTimeout: 20000,
     });
+
+    this.verifySmtpConnection();
+  }
+
+  async verifySmtpConnection() {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.warn('⚠️  SMTP not fully configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+      return;
+    }
+    try {
+      await this.emailTransporter.verify();
+      console.log('✅ SMTP connection verified to', process.env.SMTP_HOST);
+    } catch (error) {
+      console.error('❌ SMTP connection FAILED:', error.message);
+      console.error('   Host:', process.env.SMTP_HOST, 'Port:', process.env.SMTP_PORT);
+      console.error('   Check your SMTP credentials in .env');
+    }
   }
 
   // Queue notification for processing
@@ -121,8 +139,13 @@ class NotificationService {
       throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
     }
 
+    const fromAddr = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
+    if (!fromAddr.includes('@')) {
+      throw new Error(`Invalid from address "${fromAddr}". Set MAIL_FROM_ADDRESS in .env`);
+    }
+
     const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
+      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${fromAddr}>`,
       to: notification.recipient,
       subject: notification.subject,
       html: this.generateEmailHTML(
@@ -131,9 +154,14 @@ class NotificationService {
       ),
     };
 
-    await this.emailTransporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully to:", notification.recipient);
-    return true;
+    try {
+      await this.emailTransporter.sendMail(mailOptions);
+      console.log("✅ Email sent successfully to:", notification.recipient);
+      return true;
+    } catch (error) {
+      console.error(`❌ Email send failed to ${notification.recipient}:`, error.message);
+      throw error;
+    }
   }
 
   // Send email directly (for OTP and immediate notifications)
@@ -142,17 +170,27 @@ class NotificationService {
       throw new Error('SMTP not configured: SMTP_USER or SMTP_PASS is missing');
     }
 
+    const fromAddr = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER;
+    if (!fromAddr.includes('@')) {
+      throw new Error(`Invalid from address "${fromAddr}". Set MAIL_FROM_ADDRESS in .env`);
+    }
+
     const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER}>`,
+      from: `"${process.env.MAIL_FROM_NAME || 'Prove Ownership'}" <${fromAddr}>`,
       to,
       subject,
       html: htmlContent,
     };
 
-    const result = await this.emailTransporter.sendMail(mailOptions);
-    console.log("✅ Direct email sent successfully to:", to);
-    console.log("   Message ID:", result.messageId);
-    return true;
+    try {
+      const result = await this.emailTransporter.sendMail(mailOptions);
+      console.log("✅ Direct email sent successfully to:", to);
+      console.log("   Message ID:", result.messageId);
+      return true;
+    } catch (error) {
+      console.error(`❌ Direct email send failed to ${to}:`, error.message);
+      throw error;
+    }
   }
 
   // SMS channel deprecated — device check alerts use TermiiService directly

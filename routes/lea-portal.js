@@ -789,4 +789,22 @@ router.get('/export/cases', async (req, res) => {
   }
 });
 
+// Update LEA settings
+router.put('/settings', async (req, res) => {
+  try {
+    const { region, department } = req.body;
+    const updates = {};
+    if (region) updates.region = region;
+    if (department) updates.department = department;
+    if (Object.keys(updates).length > 0) {
+      updates.updated_at = new Date();
+      await Database.update('users', updates, 'id = ?', [req.user.id]);
+    }
+    res.json({ message: 'Settings updated successfully' });
+  } catch (error) {
+    console.error('LEA settings update error:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,4 @@
 const mysql = require('mysql2/promise');
-const crypto = require('crypto');
 const Database = require('../config');
 const NotificationService = require('./NotificationService');
 const EmailTemplate = require('./EmailTemplate');
@@ -20,9 +19,19 @@ class EmailVerificationService {
     });
   }
 
-  // Generate verification token
-  generateToken() {
-    return crypto.randomBytes(32).toString('hex');
+  // Generate a signed JWT as the verification token
+  // Using JWT means verification works even if the DB table is missing
+  generateToken(userId) {
+    return Database.generateJWT({ type: 'email_verification', sub: userId });
+  }
+
+  // Decode/verify a verification JWT, returns the decoded payload or throws
+  decodeToken(token) {
+    const decoded = Database.verifyJWT(token);
+    if (decoded.type !== 'email_verification') {
+      throw new Error('Invalid token type');
+    }
+    return decoded;
   }
 
   // Create and send email verification
@@ -31,38 +40,7 @@ class EmailVerificationService {
       const connection = await this.pool.getConnection();
       
       try {
-        // Clean up old tokens for this user (best-effort, table may not exist)
-        try {
-          await connection.execute(
-            'DELETE FROM email_verification_tokens WHERE user_id = ? AND expires_at < NOW()',
-            [userId]
-          );
-        } catch (cleanupErr) {
-          // Table may not exist yet
-        }
-
-        // Generate new token
-        const token = this.generateToken();
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-        // Insert new token
-        let insertResult;
-        try {
-          [insertResult] = await connection.execute(
-            `INSERT INTO email_verification_tokens (user_id, token, expires_at) 
-             VALUES (?, ?, ?)`,
-            [userId, token, expiresAt]
-          );
-        } catch (insertErr) {
-          console.error('email_verification_tokens table may not exist. Run migration 012:', insertErr.message);
-          return {
-            success: false,
-            message: 'Email verification temporarily unavailable',
-            error: insertErr.message
-          };
-        }
-
-        // Get user details
+        // Get user details first (needed for email even if DB insert fails)
         const [userRows] = await connection.execute(
           'SELECT name, email FROM users WHERE id = ?',
           [userId]
@@ -74,12 +52,35 @@ class EmailVerificationService {
 
         const user = userRows[0];
 
-        // Send verification email
+        const token = this.generateToken(userId);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const randomToken = require('crypto').randomBytes(32).toString('hex');
+
+        // Try to persist token to DB (best-effort — table may not exist)
+        let dbSuccess = false;
+        try {
+          await connection.execute(
+            'DELETE FROM email_verification_tokens WHERE user_id = ? AND expires_at < NOW()',
+            [userId]
+          ).catch(() => {});
+
+          await connection.execute(
+            `INSERT INTO email_verification_tokens (user_id, token, expires_at) 
+             VALUES (?, ?, ?)`,
+            [userId, randomToken, expiresAt]
+          );
+          dbSuccess = true;
+        } catch (insertErr) {
+          console.error('email_verification_tokens table may not exist. Run migration 012:', insertErr.message);
+        }
+
+        // Send verification email regardless of DB insert success
         await this.sendVerificationEmail(user, token);
 
         return {
           success: true,
-          message: 'Verification email sent successfully'
+          message: 'Verification email sent successfully',
+          token_persisted: dbSuccess
         };
 
       } finally {
@@ -97,40 +98,46 @@ class EmailVerificationService {
       const connection = await this.pool.getConnection();
       
       try {
-        // Find valid token
-        let tokenRows;
+        // Step 1: Try legacy DB-backed lookup (for tokens stored before JWT migration)
+        let userId = null;
+
         try {
-          [tokenRows] = await connection.execute(
+          const [tokenRows] = await connection.execute(
             `SELECT user_id FROM email_verification_tokens 
              WHERE token = ? AND expires_at > NOW() AND used_at IS NULL`,
             [token]
           );
+
+          if (tokenRows.length > 0) {
+            userId = tokenRows[0].user_id;
+            // Mark token as used (best-effort)
+            await connection.execute(
+              'UPDATE email_verification_tokens SET used_at = NOW() WHERE token = ?',
+              [token]
+            ).catch(() => {});
+          }
         } catch (queryErr) {
-          console.error('email_verification_tokens table query failed:', queryErr.message);
-          return {
-            success: false,
-            message: 'Email verification is currently unavailable',
-            error: queryErr.message
-          };
+          // Table may not exist — fall through to JWT verification
         }
 
-        if (tokenRows.length === 0) {
+        // Step 2: If DB lookup failed, try JWT verification
+        if (!userId) {
+          try {
+            const decoded = this.decodeToken(token);
+            userId = decoded.sub;
+          } catch (jwtErr) {
+            return {
+              success: false,
+              message: 'Invalid or expired verification token'
+            };
+          }
+        }
+
+        if (!userId) {
           return {
             success: false,
             message: 'Invalid or expired verification token'
           };
-        }
-
-        const userId = tokenRows[0].user_id;
-
-        // Mark token as used
-        try {
-          await connection.execute(
-            'UPDATE email_verification_tokens SET used_at = NOW() WHERE token = ?',
-            [token]
-          );
-        } catch (updateErr) {
-          // Non-fatal
         }
 
         // Mark user as verified

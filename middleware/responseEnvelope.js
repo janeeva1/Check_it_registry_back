@@ -19,16 +19,13 @@ function responseEnvelope(req, res, next) {
       return originalJson(errorBody);
     }
 
-    if (body && typeof body === 'object' && (body.success !== undefined || body.error !== undefined)) {
+    if (body && typeof body === 'object' && (body.success !== undefined || body.error !== undefined || body.data !== undefined)) {
       return originalJson(body);
     }
 
     const envelope = { success: true };
 
     if (body && typeof body === 'object' && body.pagination) {
-      envelope.data = body.data;
-      envelope.meta = { pagination: body.pagination };
-    } else if (body && typeof body === 'object' && body.data !== undefined && body.pagination) {
       envelope.data = body.data;
       envelope.meta = { pagination: body.pagination };
     } else {

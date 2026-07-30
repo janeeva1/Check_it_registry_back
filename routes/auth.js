@@ -289,8 +289,14 @@ router.post('/login', async (req, res) => {
     // Check email verification
     const emailVerificationOptional = process.env.EMAIL_VERIFICATION_REQUIRED === 'false';
     if (!user.verified_at && !emailVerificationOptional) {
+      // Fire-and-forget: send a fresh verification email
+      const EmailVerificationService = require('../services/EmailVerificationService');
+      EmailVerificationService.resendVerification(user.email).catch(err =>
+        console.error('Auto-resend verification failed:', err.message)
+      );
+
       return res.status(403).json({
-        error: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+        error: 'Please verify your email address before logging in. A fresh verification link has been sent to your email.',
         needs_verification: true,
         email: user.email,
         user_id: user.id

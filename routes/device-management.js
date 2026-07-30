@@ -165,9 +165,17 @@ router.post("/", authenticateToken, async (req, res) => {
       });
     }
 
+    // Normalize field names before validation (frontend sends 'serial', backend expects 'serialNumber')
+    const normalizedData = {
+      ...req.body,
+      serialNumber: req.body.serial || req.body.serialNumber,
+      description: req.body.description || req.body.notes,
+    };
+    delete normalizedData.serial; // avoid confusion
+
     // Validate category and device data
     const DeviceCategoryService = require('../services/DeviceCategoryService');
-    const validation = DeviceCategoryService.validateDeviceData(normalizedCategory, req.body);
+    const validation = DeviceCategoryService.validateDeviceData(normalizedCategory, normalizedData);
     
     if (!validation.valid) {
       return res.status(400).json({ 
@@ -176,7 +184,7 @@ router.post("/", authenticateToken, async (req, res) => {
     }
 
     // Get primary identifier
-    const primaryIdentifier = DeviceCategoryService.getPrimaryIdentifier(normalizedCategory, req.body);
+    const primaryIdentifier = DeviceCategoryService.getPrimaryIdentifier(normalizedCategory, normalizedData);
     
     // Check if device already exists (allow re-registration if released)
     const existingDevice = await Database.query(`
